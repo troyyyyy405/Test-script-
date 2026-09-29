@@ -1,0 +1,325 @@
+
+-- VORTEX HUB
+-- Roblox Studio LocalScript
+-- Place inside StarterPlayerScripts
+
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+local remotes = ReplicatedStorage:WaitForChild("VortexRemotes")
+local adminRemote = remotes:WaitForChild("AdminAction")
+local eggRemote = remotes:WaitForChild("EggAction")
+
+local speed = 16
+local flySpeed = 50
+local flying = false
+local noclip = false
+local antiHit = false
+
+local character, humanoid, root
+local flyConnection
+local bodyVelocity
+local bodyGyro
+
+local function getCharacter()
+    character = player.Character or player.CharacterAdded:Wait()
+    humanoid = character:WaitForChild("Humanoid")
+    root = character:WaitForChild("HumanoidRootPart")
+end
+
+getCharacter()
+
+player.CharacterAdded:Connect(function()
+    flying = false
+    noclip = false
+    antiHit = false
+
+    if flyConnection then
+        flyConnection:Disconnect()
+        flyConnection = nil
+    end
+
+    task.wait(0.5)
+    getCharacter()
+    humanoid.WalkSpeed = speed
+end)
+
+-- GUI
+local gui = Instance.new("ScreenGui")
+gui.Name = "VORTEX HUB"
+gui.ResetOnSpawn = false
+gui.Parent = playerGui
+
+local function make(class, props, parent)
+    local obj = Instance.new(class)
+    for k, v in pairs(props) do
+        obj[k] = v
+    end
+    obj.Parent = parent
+    return obj
+end
+
+local logo = make("TextButton", {
+    Name = "VortexLogo",
+    Size = UDim2.fromOffset(55, 55),
+    Position = UDim2.new(0, 20, 0.4, 0),
+    BackgroundColor3 = Color3.fromRGB(10, 10, 10),
+    Text = "V",
+    TextColor3 = Color3.new(1, 1, 1),
+    TextSize = 30,
+    Font = Enum.Font.GothamBold,
+    Active = true,
+    Draggable = true
+}, gui)
+
+make("UICorner", {
+    CornerRadius = UDim.new(1, 0)
+}, logo)
+
+make("UIStroke", {
+    Color = Color3.new(1, 1, 1),
+    Thickness = 2
+}, logo)
+
+local frame = make("Frame", {
+    Name = "Main",
+    Size = UDim2.fromOffset(300, 440),
+    Position = UDim2.new(0.5, -150, 0.5, -220),
+    BackgroundColor3 = Color3.fromRGB(15, 15, 15),
+    Visible = true,
+    Active = true,
+    Draggable = true
+}, gui)
+
+make("UICorner", {
+    CornerRadius = UDim.new(0, 12)
+}, frame)
+
+make("UIStroke", {
+    Color = Color3.fromRGB(220, 220, 220),
+    Thickness = 1.5
+}, frame)
+
+local title = make("TextLabel", {
+    Size = UDim2.new(1, -50, 0, 45),
+    Position = UDim2.fromOffset(10, 0),
+    BackgroundTransparency = 1,
+    Text = "VORTEX HUB",
+    TextColor3 = Color3.new(1, 1, 1),
+    Font = Enum.Font.GothamBold,
+    TextSize = 22
+}, frame)
+
+local close = make("TextButton", {
+    Size = UDim2.fromOffset(35, 35),
+    Position = UDim2.new(1, -40, 0, 5),
+    BackgroundColor3 = Color3.fromRGB(50, 50, 50),
+    Text = "X",
+    TextColor3 = Color3.new(1, 1, 1),
+    TextSize = 18,
+    Font = Enum.Font.GothamBold
+}, frame)
+
+make("UICorner", {
+    CornerRadius = UDim.new(0, 8)
+}, close)
+
+close.MouseButton1Click:Connect(function()
+    frame.Visible = false
+end)
+
+logo.MouseButton1Click:Connect(function()
+    frame.Visible = not frame.Visible
+end)
+
+local layout = make("UIListLayout", {
+    Padding = UDim.new(0, 7),
+    SortOrder = Enum.SortOrder.LayoutOrder
+}, make("Frame", {
+    Name = "Buttons",
+    Size = UDim2.new(1, -20, 1, -60),
+    Position = UDim2.fromOffset(10, 50),
+    BackgroundTransparency = 1
+}, frame))
+
+local buttonHolder = layout.Parent
+
+local function addButton(text, callback)
+    local btn = make("TextButton", {
+        Size = UDim2.new(1, 0, 0, 38),
+        BackgroundColor3 = Color3.fromRGB(35, 35, 35),
+        Text = text,
+        TextColor3 = Color3.new(1, 1, 1),
+        Font = Enum.Font.GothamSemibold,
+        TextSize = 14
+    }, buttonHolder)
+
+    make("UICorner", {
+        CornerRadius = UDim.new(0, 8)
+    }, btn)
+
+    btn.MouseButton1Click:Connect(callback)
+    return btn
+end
+
+-- Speed
+local speedButton
+
+speedButton = addButton("Speed: 16", function()
+    speed = speed + 10
+    if speed > 100 then speed = 16 end
+
+    if humanoid then
+        humanoid.WalkSpeed = speed
+    end
+
+    speedButton.Text = "Speed: " .. speed
+end)
+
+-- Fly
+local flyButton
+
+flyButton = addButton("Fly: OFF", function()
+    flying = not flying
+
+    if flying then
+        getCharacter()
+
+        bodyVelocity = Instance.new("BodyVelocity")
+        bodyVelocity.MaxForce = Vector3.new(1e6, 1e6, 1e6)
+        bodyVelocity.Velocity = Vector3.zero
+        bodyVelocity.Parent = root
+
+        bodyGyro = Instance.new("BodyGyro")
+        bodyGyro.MaxTorque = Vector3.new(1e6, 1e6, 1e6)
+        bodyGyro.P = 10000
+        bodyGyro.Parent = root
+
+        flyConnection = RunService.RenderStepped:Connect(function()
+            if not flying or not root.Parent then return end
+
+            local camera = workspace.CurrentCamera
+            local move = humanoid.MoveDirection
+
+            local vertical = 0
+            if UIS:IsKeyDown(Enum.KeyCode.Space) then
+                vertical = 1
+            elseif UIS:IsKeyDown(Enum.KeyCode.LeftControl) then
+                vertical = -1
+            end
+
+            bodyVelocity.Velocity =
+                move * flySpeed
+                + Vector3.new(0, vertical * flySpeed, 0)
+
+            bodyGyro.CFrame = camera.CFrame
+        end)
+    else
+        if flyConnection then
+            flyConnection:Disconnect()
+            flyConnection = nil
+        end
+
+        if bodyVelocity then bodyVelocity:Destroy() end
+        if bodyGyro then bodyGyro:Destroy() end
+    end
+
+    flyButton.Text = "Fly: " .. (flying and "ON" or "OFF")
+end)
+
+-- Noclip
+local noclipButton
+
+noclipButton = addButton("Noclip: OFF", function()
+    noclip = not noclip
+
+    noclipButton.Text = "Noclip: " .. (noclip and "ON" or "OFF")
+
+    if not noclip and character then
+        for _, part in ipairs(character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = true
+            end
+        end
+    end
+end)
+
+RunService.Stepped:Connect(function()
+    if noclip and character then
+        for _, part in ipairs(character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
+            end
+        end
+    end
+end)
+
+-- Anti hit: requests server-authorized protection
+local hitButton
+
+hitButton = addButton("Anti-Hit: OFF", function()
+    antiHit = not antiHit
+    hitButton.Text = "Anti-Hit: " .. (antiHit and "ON" or "OFF")
+
+    adminRemote:FireServer("AntiHit", antiHit)
+end)
+
+-- Teleport to a designated spawn
+addButton("Teleport to Spawn", function()
+    local spawnLocation = workspace:FindFirstChildWhichIsA("SpawnLocation", true)
+
+    if spawnLocation and root then
+        root.CFrame = spawnLocation.CFrame + Vector3.new(0, 4, 0)
+    end
+end)
+
+-- Egg recovery: ask the server to release any stuck egg transaction
+addButton("Recover Stuck Egg", function()
+    eggRemote:FireServer("Recover")
+end)
+
+-- Auto-farm: server-controlled, game-specific
+local autoFarm = false
+local farmButton
+
+farmButton = addButton("Auto Farm: OFF", function()
+    autoFarm = not autoFarm
+
+    farmButton.Text = "Auto Farm: " .. (autoFarm and "ON" or "OFF")
+
+    adminRemote:FireServer("AutoFarm", autoFarm)
+end)
+
+-- Reset movement
+addButton("Reset Movement", function()
+    flying = false
+    noclip = false
+
+    if flyConnection then
+        flyConnection:Disconnect()
+        flyConnection = nil
+    end
+
+    if bodyVelocity then bodyVelocity:Destroy() end
+    if bodyGyro then bodyGyro:Destroy() end
+
+    if humanoid then
+        humanoid.WalkSpeed = 16
+    end
+
+    if character then
+        for _, part in ipairs(character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = true
+            end
+        end
+    end
+
+    flyButton.Text = "Fly: OFF"
+    noclipButton.Text = "Noclip: OFF"
+end)
